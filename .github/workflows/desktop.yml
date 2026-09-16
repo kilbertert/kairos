@@ -25,10 +25,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
+      - run: npm ci
+      # generate_context! validates `frontendDist` at compile time, so the
+      # frontend has to exist before cargo runs. Omitting this was the first
+      # version of this job, and the failure it produced looked like a code error.
+      - run: npm run desktop:dist
       # Not `--locked`: there is no committed Cargo.lock yet, because generating
       # one needs a toolchain this project's dev machine does not have. The first
       # green run should have its Cargo.lock committed so builds become
