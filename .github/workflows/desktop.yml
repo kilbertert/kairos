@@ -7,11 +7,34 @@ on:
   push:
     tags: ['desktop-v*']
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
 
 permissions:
   contents: write
 
 jobs:
+  # Compiles the Rust shell. This has to run on pull requests: the shell has no
+  # local toolchain on the development machine, so without this job a compile
+  # error stays invisible until someone cuts a release, which is the worst
+  # possible moment to discover it. `cargo check` only — bundling is the release
+  # job's business.
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      # Not `--locked`: there is no committed Cargo.lock yet, because generating
+      # one needs a toolchain this project's dev machine does not have. The first
+      # green run should have its Cargo.lock committed so builds become
+      # reproducible; until then cargo resolves dependencies itself.
+      - run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+
   # Frontend checks the desktop build must not break. Cheap, and they gate the
   # expensive Windows job.
   dist:
