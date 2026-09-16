@@ -27,7 +27,17 @@ class NotificationManager {
 
   async send(title, options = {}) {
 
-    if (Notification.permission !== 'granted') return null;
+    if (!('Notification' in globalThis)) return null;
+
+    // init() is called once at startup and never retried. A permission granted
+    // later — which on desktop is every first run, since the prompt cannot
+    // appear until a focus session ends — would otherwise be invisible here and
+    // the notification would be dropped. Re-read the live value instead.
+    if (Notification.permission !== this.permission) {
+      this.permission = Notification.permission;
+    }
+
+    if (this.permission !== 'granted') return null;
 
     const defaultOptions = {
       body: '',
