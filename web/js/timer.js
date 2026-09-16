@@ -213,10 +213,13 @@ class TimerManager {
 
     if (this.currentSession === 'focus') {
       alternativeNotifications.notifyPomodoroComplete();
+      notificationManager.sendPomodoroComplete();
     } else if (this.currentSession === 'longBreak') {
       alternativeNotifications.notifyBreakComplete();
+      notificationManager.sendLongBreakComplete();
     } else {
       alternativeNotifications.notifyBreakComplete();
+      notificationManager.sendShortBreakComplete();
     }
   }
 

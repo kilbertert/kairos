@@ -6,6 +6,8 @@
     "dev": "npm run dev --workspace web",
     "build": "npm run build --workspace web",
     "test": "playwright test",
+    "test:desktop": "playwright test --config playwright.desktop.config.js",
+    "desktop:dist": "node desktop/scripts/build.mjs",
     "test:security": "node --test tests/privacy/*.test.mjs",
     "check:release": "python3 scripts/check-release.py"
   },

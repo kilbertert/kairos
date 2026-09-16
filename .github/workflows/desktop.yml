@@ -1,0 +1,119 @@
+name: Desktop
+
+# Builds the Windows installer. Kept separate from verify.yml so that a desktop
+# change never lengthens the pull-request feedback loop, and a web change never
+# invalidates a desktop artifact.
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  # Compiles the Rust shell. This has to run on pull requests: the shell has no
+  # local toolchain on the development machine, so without this job a compile
+  # error stays invisible until someone cuts a release, which is the worst
+  # possible moment to discover it. `cargo check` only — bundling is the release
+  # job's business.
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - run: npm ci
+      # generate_context! validates `frontendDist` at compile time, so the
+      # frontend has to exist before cargo runs. Omitting this was the first
+      # version of this job, and the failure it produced looked like a code error.
+      - run: npm run desktop:dist
+      # Not `--locked`: there is no committed Cargo.lock yet, because generating
+      # one needs a toolchain this project's dev machine does not have. Once it is
+      # committed this becomes `--locked`.
+      - run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+      # CI is the only place a lockfile can be produced for this crate, so it is
+      # the only place that can hand one back to the repository.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: desktop/src-tauri/Cargo.lock
+          retention-days: 7
+
+  # Frontend checks the desktop build must not break. Cheap, and they gate the
+  # expensive Windows job.
+  dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run desktop:dist
+      - run: test ! -e dist-desktop/sw.js
+      # The desktop version appears in two files and they must agree. It is
+      # deliberately NOT compared against package.json: the web app and the
+      # desktop shell are separate version lines (docs/adr/0001).
+      - run: |
+          python3 -c "
+          import json, re, pathlib
+          conf = json.load(open('desktop/src-tauri/tauri.conf.json'))['version']
+          cargo = re.search(r'^version = \"([^\"]+)\"', pathlib.Path('desktop/src-tauri/Cargo.toml').read_text(), re.M).group(1)
+          print(conf, cargo)
+          assert conf == cargo, 'tauri.conf.json and Cargo.toml versions disagree'
+          "
+      # Exercise the app exactly as the shell serves it: the web suite, pointed
+      # at the shell's output, plus the desktop-only assertions.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-desktop
+          path: dist-desktop/
+          retention-days: 7
+
+  build:
+    needs: dist
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      # The shell loads dist-desktop/, so it must exist before the Rust build
+      # starts. The icon is committed (desktop/src-tauri/icons/icon.ico) rather
+      # than generated here: it would otherwise need Pillow and a `python3`
+      # invocation on a Windows runner, two assumptions that are cheap to remove
+      # and expensive to debug from a failed release build.
+      - run: npm run desktop:dist
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          # No updater signing key yet; P5 adds it. Until then this produces a
+          # plain installer with no update manifest.
+          includeUpdaterJson: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kairos-windows-installer
+          path: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 7
