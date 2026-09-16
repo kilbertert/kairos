@@ -6,6 +6,8 @@ node_modules/
 !*.env.example
 dist/
 dist-pwa/
+# Assembled by desktop/scripts/build.mjs: the web build minus the service worker.
+dist-desktop/
 coverage/
 playwright-report/
 test-results/
@@ -36,3 +38,8 @@ BOOTSTRAP.md
 HEARTBEAT.md
 **/token.json
 **/credentials.json
+
+# Rust / Tauri
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+

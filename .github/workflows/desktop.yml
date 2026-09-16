@@ -1,0 +1,81 @@
+name: Desktop
+
+# Builds the Windows installer. Kept separate from verify.yml so that a desktop
+# change never lengthens the pull-request feedback loop, and a web change never
+# invalidates a desktop artifact.
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Frontend checks the desktop build must not break. Cheap, and they gate the
+  # expensive Windows job.
+  dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run desktop:dist
+      - run: test ! -e dist-desktop/sw.js
+      # The desktop version appears in two files and they must agree. It is
+      # deliberately NOT compared against package.json: the web app and the
+      # desktop shell are separate version lines (docs/adr/0001).
+      - run: |
+          python3 -c "
+          import json, re, pathlib
+          conf = json.load(open('desktop/src-tauri/tauri.conf.json'))['version']
+          cargo = re.search(r'^version = \"([^\"]+)\"', pathlib.Path('desktop/src-tauri/Cargo.toml').read_text(), re.M).group(1)
+          print(conf, cargo)
+          assert conf == cargo, 'tauri.conf.json and Cargo.toml versions disagree'
+          "
+      # Exercise the app exactly as the shell serves it: the web suite, pointed
+      # at the shell's output, plus the desktop-only assertions.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-desktop
+          path: dist-desktop/
+          retention-days: 7
+
+  build:
+    needs: dist
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      # The shell loads dist-desktop/, so it must exist before the Rust build
+      # starts. The icon is committed (desktop/src-tauri/icons/icon.ico) rather
+      # than generated here: it would otherwise need Pillow and a `python3`
+      # invocation on a Windows runner, two assumptions that are cheap to remove
+      # and expensive to debug from a failed release build.
+      - run: npm run desktop:dist
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          # No updater signing key yet; P5 adds it. Until then this produces a
+          # plain installer with no update manifest.
+          includeUpdaterJson: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kairos-windows-installer
+          path: desktop/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 7
