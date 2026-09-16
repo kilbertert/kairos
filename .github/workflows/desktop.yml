@@ -39,10 +39,16 @@ jobs:
       # version of this job, and the failure it produced looked like a code error.
       - run: npm run desktop:dist
       # Not `--locked`: there is no committed Cargo.lock yet, because generating
-      # one needs a toolchain this project's dev machine does not have. The first
-      # green run should have its Cargo.lock committed so builds become
-      # reproducible; until then cargo resolves dependencies itself.
+      # one needs a toolchain this project's dev machine does not have. Once it is
+      # committed this becomes `--locked`.
       - run: cargo check --manifest-path desktop/src-tauri/Cargo.toml
+      # CI is the only place a lockfile can be produced for this crate, so it is
+      # the only place that can hand one back to the repository.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: desktop/src-tauri/Cargo.lock
+          retention-days: 7
 
   # Frontend checks the desktop build must not break. Cheap, and they gate the
   # expensive Windows job.

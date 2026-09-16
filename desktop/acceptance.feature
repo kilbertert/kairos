@@ -4,9 +4,10 @@
 # stores a row in IndexedDB" is not an acceptable Then clause on its own; the
 # observable form is "the data is still there after a restart".
 #
-# Executed by: tests/desktop/shell.spec.js (automated, CI, against
+# Executed by: desktop/tests/shell.spec.js (automated, CI, against
 # dist-desktop/) and desktop/qa-plan.md (manual, Windows, for the capabilities
-# a headless browser cannot exercise).
+# a headless browser cannot exercise). The web application's behaviour is
+# covered by the existing suite in tests/, which this change does not disturb.
 
 Feature: Kairos as a Windows desktop application
 
